@@ -11,6 +11,33 @@ import numpy as np
 from DIPPID_pyqtnode import DIPPIDNode, BufferNode
 import pyqtgraph.flowchart.library as fclib
 
+# custom text node for prediction showcasing
+# TODO: node is still connect to accel_x output for testing
+class DisplayTextNode(Node):
+    nodeName = "DisplayTextNode"
+
+    def __init__(self, name):
+        Node.__init__(self, name, terminals={
+            "input": dict(io="in"),
+            "prediction": dict(io="out"),
+        })
+        self.init_ui()
+
+    def init_ui(self):
+        self.ui = QtGui.QWidget()
+        self.layout = QtGui.QGridLayout()
+        self.text = QtGui.QLabel()
+        self.text.setText("")
+        self.layout.addWidget(self.text)
+        self.ui.setLayout(self.layout)
+
+    def ctrlWidget(self):
+        return self.ui
+
+    def process(self, **kwds):
+        prediction = kwds["input"][0]
+        self.text.setText("Prediction: " + str(prediction))
+
 
 # custom FFT node for frequency spectrogram output
 class FftNode(Node):
@@ -46,7 +73,7 @@ class FftNode(Node):
         }
 
 
-def init_nodes(layout, fc, dippid_node, fft_node):
+def init_nodes(fc, dippid_node, fft_node, display_text_node):
     # create buffer nodes
     buffer_node_x = fc.createNode("Buffer", pos=(150, 0))
     buffer_node_y = fc.createNode("Buffer", pos=(150, 100))
@@ -57,14 +84,18 @@ def init_nodes(layout, fc, dippid_node, fft_node):
     fc.connectTerminals(dippid_node["accelY"], buffer_node_y["dataIn"])
     fc.connectTerminals(dippid_node["accelZ"], buffer_node_z["dataIn"])
 
-    # connect FFT nodes
-    fc.connectTerminals(buffer_node_x['dataOut'], fft_node['accelX'])
-    fc.connectTerminals(buffer_node_y['dataOut'], fft_node['accelY'])
-    fc.connectTerminals(buffer_node_z['dataOut'], fft_node['accelZ'])
+    # connect FFT node
+    fc.connectTerminals(buffer_node_x["dataOut"], fft_node["accelX"])
+    fc.connectTerminals(buffer_node_y["dataOut"], fft_node["accelY"])
+    fc.connectTerminals(buffer_node_z["dataOut"], fft_node["accelZ"])
+
+    # connect display text node
+    fc.connectTerminals(buffer_node_x["dataOut"], display_text_node["input"])
 
 
 if __name__ == "__main__":
     fclib.registerNodeType(FftNode, [("FftNode",)])
+    fclib.registerNodeType(DisplayTextNode, [("DisplayTextNode",)])
 
     app = QtGui.QApplication([])
     win = QtGui.QMainWindow()
@@ -88,7 +119,10 @@ if __name__ == "__main__":
     # create FFT node
     fft_node = fc.createNode("FftNode", pos=(300, 100))
 
-    init_nodes(layout, fc, dippid_node, fft_node)
+    # create FFT node
+    display_text_node = fc.createNode("DisplayTextNode", pos=(450, 100))
+
+    init_nodes(fc, dippid_node, fft_node, display_text_node)
 
     win.show()
     if (sys.flags.interactive != 1) or not hasattr(QtCore, "PYQT_VERSION"):
