@@ -27,7 +27,7 @@ class FftNode(Node):
     def calculate_frequency(self, data):
         try:
             n = len(data)
-            # fft computing and normalization and 
+            # fft computing and normalization and
             # use only first half as the function is mirrored
             frequenzy = np.abs(np.fft.fft(data) / n)[0:int(n / 2)]
             return frequenzy
@@ -38,7 +38,7 @@ class FftNode(Node):
         x_frequency = self.calculate_frequency(kwds["accelX"])
         y_frequency = self.calculate_frequency(kwds["accelY"])
         z_frequency = self.calculate_frequency(kwds["accelZ"])
-        
+
         return {
             "x": x_frequency,
             "y": y_frequency,
