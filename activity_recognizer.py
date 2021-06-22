@@ -11,6 +11,40 @@ import numpy as np
 from DIPPID_pyqtnode import DIPPIDNode, BufferNode
 import pyqtgraph.flowchart.library as fclib
 
+'''
+Custom SVM node which can be switched between
+inactive, traning and prediction.
+
+Inactive: Do nothing
+
+Traning mode: Continually read in sample data (in our case
+a list of frequency components) and trains a SVM classifier
+with the data (and previous data) (Note, he category for this sample 
+can be defined by a text field in the control pane)
+
+Prediction: SVM node reads sample in and outputs the predicted category
+as string. 
+'''
+
+# TODO: Fix bug, frequency dict from FFT node None?
+class SvmNode(Node):
+    nodeName = "SvmNode"
+
+    def __init__(self, name):
+        Node.__init__(self, name, terminals={
+            "sample_input": dict(io="in"),
+            "prediction": dict(io="out"),
+        })
+
+    def ctrlWidget(self):
+        return self.ui
+
+    def process(self, **kwds):
+        print(kwds)
+        prediction = kwds["sample_input"]
+        print(prediction)
+
+
 # custom text node for prediction showcasing
 # TODO: node is still connect to accel_x output for testing
 class DisplayTextNode(Node):
@@ -57,7 +91,8 @@ class FftNode(Node):
             # fft computing and normalization and
             # use only first half as the function is mirrored
             frequenzy = np.abs(np.fft.fft(data) / n)[0:int(n / 2)]
-            return frequenzy
+            # tolist() to convert from np.ndarray
+            return frequenzy.tolist()
         except Exception as e:
             print(e)
 
@@ -66,14 +101,16 @@ class FftNode(Node):
         y_frequency = self.calculate_frequency(kwds["accelY"])
         z_frequency = self.calculate_frequency(kwds["accelZ"])
 
-        return {
+        frequencies = {
             "x": x_frequency,
             "y": y_frequency,
             "z": z_frequency,
         }
 
+        return frequencies
 
-def init_nodes(fc, dippid_node, fft_node, display_text_node):
+
+def init_nodes(fc, dippid_node, fft_node, svm_node, display_text_node):
     # create buffer nodes
     buffer_node_x = fc.createNode("Buffer", pos=(150, 0))
     buffer_node_y = fc.createNode("Buffer", pos=(150, 100))
@@ -89,12 +126,16 @@ def init_nodes(fc, dippid_node, fft_node, display_text_node):
     fc.connectTerminals(buffer_node_y["dataOut"], fft_node["accelY"])
     fc.connectTerminals(buffer_node_z["dataOut"], fft_node["accelZ"])
 
+    # connect svm node
+    fc.connectTerminals(fft_node["frequency"], svm_node["sample_input"])
+
     # connect display text node
     fc.connectTerminals(buffer_node_x["dataOut"], display_text_node["input"])
 
 
 if __name__ == "__main__":
     fclib.registerNodeType(FftNode, [("FftNode",)])
+    fclib.registerNodeType(SvmNode, [("SvmNode",)])
     fclib.registerNodeType(DisplayTextNode, [("DisplayTextNode",)])
 
     app = QtGui.QApplication([])
@@ -120,9 +161,12 @@ if __name__ == "__main__":
     fft_node = fc.createNode("FftNode", pos=(300, 100))
 
     # create FFT node
-    display_text_node = fc.createNode("DisplayTextNode", pos=(450, 100))
+    svm_node = fc.createNode("SvmNode", pos=(450, 100))
 
-    init_nodes(fc, dippid_node, fft_node, display_text_node)
+    # create display text node
+    display_text_node = fc.createNode("DisplayTextNode", pos=(600, 100))
+
+    init_nodes(fc, dippid_node, fft_node, svm_node, display_text_node)
 
     win.show()
     if (sys.flags.interactive != 1) or not hasattr(QtCore, "PYQT_VERSION"):
