@@ -6,7 +6,11 @@ What is the title of the paper?
 
 
 What are some common use cases for machine learning in practical applications or research prototypes?
-TBD
+- Voice and picture recognition
+- Spam filtering
+- Advertisment recommendations and personalization
+- Security (e.g. 2nd Auth)
+- Self driving cars
 
 
 Which problems of machine learning do the authors of the paper identify? Explain one of them in detail.
@@ -27,11 +31,14 @@ Which problems of machine learning do the authors of the paper identify? Explain
   Another common problem are experimental codepaths which are used to perform experiments with alternative algorithms by implementing these experimental
   codepaths as conditional branches in production code. The issue comes with the maintance of the backward compatibility of the changes in the models.
 
-- The final problem is dealing with changes from the outside world. 
+- The final problem is dealing with changes from the outside world. Setting manual thresholds to get tradeoffs on certain metrics and updating them is time
+  consuming. ML systems have often trouble distingushing the impace of correlating features and the problem comes if the world decides that these features 
+  no longer co-occur and therefore the predicted behaviour changes.
   
 
 What are the credentials of the authors with regard to machine learning? Have they published research on machine learning (or using machine-learning techniques) previously?
-(TensorFlow.js: Machine Learning for the Web and Beyond, 2019, D. Sculley et.al)
-D. Sculley: Design, API and implementation of TensorFlow.js and highlighting usecases
+Yes the also published a paper on click-through rates (CTR) prediction, showcasing case studies and topics from recent experiments of a deployed CTR prediction 
+system. These include improvements of supervised learning and the user of per-coordinate learning rates.
+(Ad Click Prediction: a View from the Trenches, 2013, H Brendan McMahan et. al)
 
 
