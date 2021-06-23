@@ -9,35 +9,35 @@ What are some common use cases for machine learning in practical applications or
 - Voice and picture recognition
 - Spam filtering
 - Advertisment recommendations and personalization
-- Security (e.g. 2nd Auth)
+- Security (e.g. Two Factor)
 - Self driving cars
 
 
 Which problems of machine learning do the authors of the paper identify? Explain one of them in detail.
-- Complex Models mitigate traditional software engineernig boundaries like strong abstraction, capsulation, etc.
-  Furthermore can hidden feedback loops effect the improvement of the system very difficult and add cost to development.
-  Also can undeclared consumers (ML learning models without access controll consuming the output of a given prediction model as an
-  input to another component of the system) impact other parts of the system in a unintended or detrimental way.
+- Complex Models mitigate traditional software engineering boundaries like strong abstraction, capsulation, etc.
+  Furthermore, can hidden feedback loops effect the improvement of the system very difficult and add cost to development.
+  Also can undeclared consumers (ML learning models without access control consuming the output of a given prediction model as an
+  input to another component of the system) impact other parts of the system in an unintended or detrimental way.
 
 - Data dependencies can also carry similar debt as code dependencies. The produced input features from other systems are often consumed
-  as input, but the problem is that they can qualitatively change over time. Also simimlar to underutilized code dependencies are underutilized
-  data dependencies, which can can make the system vulnerable to changes by sneaking in the model through legacy-, bundle-, or other features.
-  Often there are situations where similar models for problems exist (and is beeing used), but a different problem is needed to be solved. This 
-  can also get worse if the models are cascaded with a problem learned on top of another.
+  as input, but the problem is that they can qualitatively change over time. Also similar to underutilized code dependencies are underutilized
+  data dependencies, which can make the system vulnerable to changes by sneaking in the model through legacy-, bundle-, or other features.
+  Often there are situations where similar models for problems exist (and is being used), but a different problem is needed to be solved. This 
+  can also get worse if the models are cascaded, with a problem learned on top of another.
 
-- The quality of the machine learning code can end up with high-debt anti-patterns. One problem is "Glue Code" (using self contained solutions often 
-  in which massive amount of supporting code is written to get data in and out of the packages) which tends to freeze up a system. A special case of 
-  glue code is are pipeline jungles which often appear in data preparation. The preperation in a ML format can get out of control with scrapes, joins, etc.
-  Another common problem are experimental codepaths which are used to perform experiments with alternative algorithms by implementing these experimental
-  codepaths as conditional branches in production code. The issue comes with the maintance of the backward compatibility of the changes in the models.
+- The quality of the machine learning code can end up with high-debt anti-patterns. One problem is "Glue Code" (using self-contained solutions often 
+  in which a massive amount of supporting code is written to get data in and out of the packages) which tends to freeze up a system. A special case of 
+  glue code is are pipeline jungles which often appear in data preparation. The preparation in a ML format can get out of control with scrapes, joins, etc.
+  Another common problem are experimental code paths which are used to perform experiments with alternative algorithms by implementing these experimental
+  code paths as conditional branches in production code. The issue comes with the maintenance of the backward compatibility of the changes in the models.
 
-- The final problem is dealing with changes from the outside world. Setting manual thresholds to get tradeoffs on certain metrics and updating them is time
-  consuming. ML systems have often trouble distingushing the impace of correlating features and the problem comes if the world decides that these features 
-  no longer co-occur and therefore the predicted behaviour changes.
+- The final problem is dealing with changes from the outside world. Setting manual thresholds to get trade offs on certain metrics and updating them is time
+  consuming. ML systems have often trouble distinguishing the impact of correlating features and the problem comes if the world decides that these features 
+  no longer co-occur and therefore the predicted behavior changes.
   
 
 What are the credentials of the authors with regard to machine learning? Have they published research on machine learning (or using machine-learning techniques) previously?
-Yes the also published a paper on click-through rates (CTR) prediction, showcasing case studies and topics from recent experiments of a deployed CTR prediction 
+Yes, they also published a paper on click-through rates (CTR) prediction, showcasing case studies and topics from recent experiments of a deployed CTR prediction 
 system. These include improvements of supervised learning and the user of per-coordinate learning rates.
 (Ad Click Prediction: a View from the Trenches, 2013, H Brendan McMahan et. al)
 
