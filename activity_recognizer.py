@@ -18,18 +18,7 @@ from numpy import fromstring
 
 
 '''
-Custom SVM node which can be switched between
-inactive, traning and prediction.
-
-Inactive: Do nothing
-
-Traning mode: Continually read in sample data (in our case
-a list of frequency components) and trains a SVM classifier
-with the data (and previous data) (Note, he category for this sample
-can be defined by a text field in the control pane)
-
-Prediction: SVM node reads sample in and outputs the predicted category
-as string.
+This script was written my Johannes Lorper and Michael Schmidt
 '''
 # Filename where our gestures are saved
 TRAINING_DATA_FILE = "training_data.csv"
@@ -41,7 +30,8 @@ TRAINING_DATA_FILE = "training_data.csv"
 DATA_LENGTH = 60
 TIME_FOR_DATA = 6000
 
-
+# Main class; written by Johannes Lorper
+# Controls the ui logic and node instances
 class ActivityRecognizer(QMainWindow):
     def __init__(self):
         super(ActivityRecognizer, self).__init__()
@@ -261,7 +251,8 @@ class ActivityRecognizer(QMainWindow):
         self.fc.connectTerminals(
             self.prediction_node["accelerator_z"], self.fft_node["frequencyZ"])
 
-
+# Node that saves the currently predicted gesture from the last signals into the current_prediction string;
+# Written by Johannes Lorper
 class PredictionNode(Node):
     nodeName = "PredictionNode"
 
@@ -330,7 +321,8 @@ class PredictionNode(Node):
         self.current_gesture_y_frequencies = kwds["accelerator_y"]
         self.current_gesture_z_frequencies = kwds["accelerator_z"]
 
-
+# Node that provides the activity recognizer with the current signals, so it can "learn" the gesture's signature;
+# Written by Johannes Lorper
 class TrainNode(Node):
     nodeName = "TrainNode"
 
@@ -362,7 +354,7 @@ class TrainNode(Node):
         self.current_gesture_z_frequencies = kwds["accelerator_z"]
 
 
-# custom FFT node for frequency spectrogram output
+# custom FFT node for frequency spectrogram output; written my Michael Schmidt
 class FftNode(Node):
     nodeName = "FftNode"
 
