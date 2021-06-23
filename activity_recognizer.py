@@ -4,7 +4,8 @@
 # Script was written by Johannes Lorper and Michael Schmidt
 
 import sys
-from PyQt5 import QtGui, QtCore
+from PyQt5 import QtGui, QtCore, QtWidgets
+from PyQt5.QtWidgets import QMainWindow
 import pyqtgraph as pg
 from pyqtgraph.flowchart import Flowchart, Node
 import numpy as np
@@ -36,22 +37,205 @@ TRAINING_DATA_FILE = "training_data.csv"
 # The amount of transformed signals from the dippid we use for 1 gesture; the transfomation cuts the dippid singal amount in half
 # to calculate to time per gesture do:
 # DATA_LENGTH / DippidFrequency/ * 2
-DATA_LENGTH = 120
+DATA_LENGTH = 60
+TIME_FOR_DATA = 6000
 
 
-class SvmNode(Node):
-    nodeName = "SvmNode"
+class ActivityRecognizer(QMainWindow):
+    def __init__(self):
+        super(ActivityRecognizer, self).__init__()
+        self.__init_ui()
+        self.init_logger(TRAINING_DATA_FILE)
+        self.init_nodes()
+        self.is_predicting = False
+        self.prediction_timer = QtCore.QTimer()
+        self.prediction_timer.timeout.connect(self.update_prediction)
+        self.is_training = False
+        self.training_timer = QtCore.QTimer()
+        self.training_timer.timeout.connect(self.add_training_data)
+        self.gesture_list = []
+        self.current_training_data_dict = {}
+        self.update_gesture_list()
 
-    def __init__(self, name):
-        Node.__init__(self, name, terminals={
-            "sample_input": dict(io="in"),
-            "prediction": dict(io="out"),
-        })
+    def __init_ui(self):
+        self.setWindowTitle("DIPPID Activity Recognizer")
+        # Define a top-level widget to hold everything
+
+        central_widget = QtGui.QWidget()
+        central_widget.setFixedWidth(1000)
+        self.setCentralWidget(central_widget)
+        # Create a grid layout to manage the widgets size and position
+        layout = QtWidgets.QHBoxLayout()
+        central_widget.setLayout(layout)
+
+        # Creating flowchart
+        self.fc = Flowchart(terminals={})
+        layout.addWidget(self.fc.widget())
+
+        # create DIPPID node
+        self.dippid_node = self.fc.createNode("DIPPID", pos=(0, 0))
+
+        # create Train node
+        self.train_node = self.fc.createNode("TrainNode", pos=(450, 150))
+
+        # create Prediction node
+        self.prediction_node = self.fc.createNode("PredictionNode", pos=(450, 150))
+        # create FFT node
+        self.fft_node = self.fc.createNode("FftNode", pos=(300, 100))
 
 
-    def process(self, **kwds):
-        prediction = kwds["sample_input"]
-        return {'prediction': np.array(prediction)}
+        # init user input ui
+        self.main_control_widget = QtWidgets.QWidget()
+        self.main_control_widget.setFixedSize(800, 400)
+        self.main_control_widget.setLayout(QtWidgets.QGridLayout())
+        layout.addWidget(self.main_control_widget)
+
+        # start connection error ui
+        self.connection_error_widget = QtWidgets.QWidget()
+        self.connection_error_widget.setFixedSize(200,100)
+        self.connection_error_widget.setLayout(QtWidgets.QVBoxLayout())
+        self.connection_error_label = QtWidgets.QLabel()
+        self.connection_error_label.setStyleSheet("QLabel {color: red;}")
+        self.connection_error_widget.layout().addWidget(self.connection_error_label)
+        self.main_control_widget.layout().addWidget(self.connection_error_widget,2,0,1,0)
+
+        # start prediction ui
+        self.prediction_control_widget = QtWidgets.QWidget()
+        self.prediction_control_widget.setFixedSize(200, 100)
+        self.prediction_control_widget.setLayout(QtWidgets.QVBoxLayout())
+        self.predict_button = QtWidgets.QPushButton("Start Predicting")
+        self.predict_button.clicked.connect(self.predict_button_press)
+        self.predict_label = QtWidgets.QLabel("No Gesture Recognizes yet")
+        self.prediction_control_widget.layout().addWidget(self.predict_button)
+        self.prediction_control_widget.layout().addWidget(self.predict_label)
+        self.main_control_widget.layout().addWidget(self.prediction_control_widget,1,0,1,1)
+
+        # start training ui
+        self.train_control_widget = QtWidgets.QWidget()
+        self.train_control_widget.setFixedSize(200, 100)
+        self.train_control_widget.setLayout(QtWidgets.QVBoxLayout())
+        self.train_button = QtWidgets.QPushButton("Start Training")
+        self.train_button.clicked.connect(self.train_button_press)
+        self.train_name_input = QtWidgets.QLineEdit("Set  Gesture Name here")
+        self.train_control_widget.layout().addWidget(self.train_name_input)
+        self.train_control_widget.layout().addWidget(self.train_button)
+        self.main_control_widget.layout().addWidget(self.train_control_widget,0,0,1,1)
+
+        # start gesture list ui
+        self.gesture_list_widget = QtWidgets.QWidget()
+        self.gesture_list_widget.setFixedSize(200, 200)
+        self.gesture_list_widget.setLayout(QtWidgets.QVBoxLayout())
+        self.gesture_list_list_widget = QtWidgets.QListWidget()
+        self.gesture_list_list_widget.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        self.gesture_list_delete_button = QtWidgets.QPushButton("Delete Selected")
+        self.gesture_list_delete_button.clicked.connect(self.delete_selected_gesture_from_list)
+        self.gesture_list_save_button = QtWidgets.QPushButton("Save Changes")
+        self.gesture_list_save_button.clicked.connect(self.save_changes_to_csv)
+        self.gesture_list_widget.layout().addWidget(self.gesture_list_list_widget)
+        self.gesture_list_widget.layout().addWidget(self.gesture_list_delete_button)
+        self.gesture_list_widget.layout().addWidget(self.gesture_list_save_button)
+        self.main_control_widget.layout().addWidget(self.gesture_list_widget,0,1,1,1)
+
+    def predict_button_press(self):
+        if self.fft_node.get_had_input_yet():
+            self.connection_error_label.setText("")
+            if not self.is_predicting:
+                self.update_prediction_node_data()
+                self.prediction_timer.start(500)
+                self.is_predicting = True
+                self.predict_button.setText("Stop Predicting")
+            else:
+                self.prediction_timer.stop()
+                self.is_predicting = False
+                self.predict_button.setText("Start Predicting")
+        else:
+            self.connection_error_label.setText("Dippid device not connected, please open 'Dippid.0' on the left side and connect")
+    
+    def update_prediction(self):
+        self.predict_label.setText(f"Gesture: {self.prediction_node.get_prediction()}")
+
+    def init_logger(self, filename):
+        self.current_filename = filename
+        if os.path.isfile(filename):
+            self.gesture_data = pd.read_csv(filename)
+        else:
+            self.gesture_data = pd.DataFrame(
+                columns=['gestureName', 'frequenciesX', 'frequenciesY', 'frequenciesZ'])
+
+    def train_button_press(self):
+        if self.fft_node.get_had_input_yet():
+            self.connection_error_label.setText("")
+            self.training_timer.start(TIME_FOR_DATA)
+            self.train_button.setText("Training!")
+            self.train_button.setDisabled(True)
+        else:
+            self.connection_error_label.setText("Dippid device not connected, please open 'Dippid.0' on the left side and connect")
+
+    def add_training_data(self):
+        self.training_timer.stop()
+        self.gesture_data = self.gesture_data.append({'gestureName': self.train_name_input.text(),
+                                                      'frequenciesX': self.train_node.get_current_frequencies_as_string("|")[0],
+                                                      'frequenciesY': self.train_node.get_current_frequencies_as_string("|")[1],
+                                                      'frequenciesZ': self.train_node.get_current_frequencies_as_string("|")[2]},
+                                                     ignore_index=True)
+        self.train_button.setDisabled(False)
+        self.train_button.setText("Start Training")
+        self.update_gesture_list()
+
+    def update_gesture_list(self):
+        self.gesture_list_list_widget.clear()
+        self.gesture_list = []
+        for index, row in self.gesture_data.iterrows():
+            self.gesture_list.append(row["gestureName"])
+        self.gesture_list_list_widget.insertItems(0, self.gesture_list)
+        self.update_prediction_node_data()
+
+    def delete_selected_gesture_from_list(self):
+        index = self.gesture_list_list_widget.currentIndex().row()
+        self.gesture_data = self.gesture_data.drop(self.gesture_data.index[index])
+        print(self.gesture_data)
+        self.update_gesture_list()
+
+    def save_changes_to_csv(self):
+        self.gesture_data.to_csv(self.current_filename, index=False)
+
+    def update_prediction_node_data(self):
+        self.current_training_data_dict = {}
+        for index, row in self.gesture_data.iterrows():
+            gesture_name = row[0]
+            gesture_x_frequencies = fromstring(row[1], sep="|")
+            gesture_y_frequencies = fromstring(row[2], sep="|")
+            gesture_z_frequencies = fromstring(row[3], sep="|")
+            self.current_training_data_dict[gesture_name] = {"x": gesture_x_frequencies, "y": gesture_y_frequencies, "z": gesture_z_frequencies}
+        self.prediction_node.init_svm_with_data(self.current_training_data_dict)
+
+
+    def init_nodes(self):
+        # create buffer nodes
+        buffer_node_x = self.fc.createNode("Buffer", pos=(150, 0))
+        buffer_node_y = self.fc.createNode("Buffer", pos=(150, 100))
+        buffer_node_z = self.fc.createNode("Buffer", pos=(150, 200))
+
+        # connect buffer nodes
+        self.fc.connectTerminals(self.dippid_node["accelX"], buffer_node_x["dataIn"])
+        self.fc.connectTerminals(self.dippid_node["accelY"], buffer_node_y["dataIn"])
+        self.fc.connectTerminals(self.dippid_node["accelZ"], buffer_node_z["dataIn"])
+
+        # connect FFT node
+        self.fc.connectTerminals(buffer_node_x["dataOut"], self.fft_node["accelX"])
+        self.fc.connectTerminals(buffer_node_y["dataOut"], self.fft_node["accelY"])
+        self.fc.connectTerminals(buffer_node_z["dataOut"], self.fft_node["accelZ"])
+
+
+
+        # connect train node to accelerator values
+        self.fc.connectTerminals(self.train_node["accelerator_x"], self.fft_node["frequencyX"])
+        self.fc.connectTerminals(self.train_node["accelerator_y"], self.fft_node["frequencyY"])
+        self.fc.connectTerminals(self.train_node["accelerator_z"], self.fft_node["frequencyZ"])
+        self.fc.connectTerminals(self.prediction_node["accelerator_x"], self.fft_node["frequencyX"])
+        self.fc.connectTerminals(self.prediction_node["accelerator_y"], self.fft_node["frequencyY"])
+        self.fc.connectTerminals(self.prediction_node["accelerator_z"], self.fft_node["frequencyZ"])
+
 
 class PredictionNode(Node):
     nodeName = "PredictionNode"
@@ -61,22 +245,24 @@ class PredictionNode(Node):
             "accelerator_y": dict(io="in"),
             "accelerator_z": dict(io="in")
         })
-        self.training_data_dict = {}
-        self.init_ui()
-        self.init_svm()
+
         self.current_gesture_x_frequencies = []
         self.current_gesture_y_frequencies = []
         self.current_gesture_z_frequencies = []
+        self.current_prediction = "None"
+        self.training_data_dict = {}
 
 
-    def init_svm(self):
+    def init_svm_with_data(self, data):
+        print("initsvm with data")
+        print(data)
+        self.training_data_dict = data
         self.classifier = svm.SVC()
-        self.update_saved_training_data()
         categories = []
         training_data = []
-        if len(self.training_data_dict) > 1:
+        if len(data) > 1:
             current_index = 0
-            for key, value in self.training_data_dict.items():
+            for key, value in data.items():
                 categories += [current_index]
                 current_values_array = []
                 current_values_array.append(value.get("x"))
@@ -107,50 +293,22 @@ class PredictionNode(Node):
                 svm_data_array += x_cut +y_cut + z_cut
         return [svm_data_array]
 
-
-
-    def init_ui(self):
-        self.ui = QtGui.QWidget()
-        self.layout = QtGui.QVBoxLayout()
-        self.predict_button = QtGui.QPushButton()
-        self.predict_button.clicked.connect(self.predict)
-        self.prediction_output = QtGui.QLabel()
-        self.prediction_output.setText("Predicted Gesture: None")
-        self.layout.addWidget(self.predict_button)
-        self.layout.addWidget(self.prediction_output)
-
-        self.predict_button.setText("Start Prediction")
-        self.ui.setLayout(self.layout)
-
-    def update_saved_training_data(self):
-        if os.path.isfile(TRAINING_DATA_FILE):
-            saved_training_data = pd.read_csv(TRAINING_DATA_FILE)
-            for index, row in saved_training_data.iterrows():
-                gesture_name = row[0]
-                gesture_x_frequencies = fromstring(row[1], sep="|")
-                gesture_y_frequencies = fromstring(row[2], sep="|")
-                gesture_z_frequencies = fromstring(row[3], sep="|")
-                self.training_data_dict[gesture_name] = {"x": gesture_x_frequencies, "y": gesture_y_frequencies, "z": gesture_z_frequencies}
-
-    def predict(self):
+    def get_prediction(self):
         input_data = []
         input_data.append(self.current_gesture_x_frequencies)
         input_data.append(self.current_gesture_y_frequencies)
         input_data.append(self.current_gesture_z_frequencies)
         predicition_data = self.get_svm_data_array(input_data)
+        #self.current_prediction = list(self.training_data_dict.keys())[self.classifier.predict(predicition_data)[0]]
+        return list(self.training_data_dict.keys())[self.classifier.predict(predicition_data)[0]]
 
-        print(list(self.training_data_dict.keys())[self.classifier.predict(predicition_data)[0]])
-        self.prediction_output.setText(list(self.training_data_dict.keys())[self.classifier.predict(predicition_data)[0]])
 
-    def ctrlWidget(self):
-        return self.ui
 
     def process(self, **kwds):
         # Get the last values from our accelerator data
         self.current_gesture_x_frequencies = kwds["accelerator_x"]
         self.current_gesture_y_frequencies = kwds["accelerator_y"]
         self.current_gesture_z_frequencies = kwds["accelerator_z"]
-
 
 
 class TrainNode(Node):
@@ -162,52 +320,17 @@ class TrainNode(Node):
             "accelerator_y": dict(io="in"),
             "accelerator_z": dict(io="in")
         })
-        self.init_ui()
         self.isRecording = False
         self.current_gesture_x_frequencies = []
         self.current_gesture_y_frequencies = []
         self.current_gesture_z_frequencies = []
 
-
-    def init_ui(self):
-        self.ui = QtGui.QWidget()
-        self.layout = QtGui.QVBoxLayout()
-        self.start_button = QtGui.QPushButton()
-        self.start_button.clicked.connect(self.start_or_stop_recording)
-        self.name_input = QtGui.QLineEdit()
-        self.name_input.setText("Set your activity name here")
-        self.layout.addWidget(self.name_input)
-        self.layout.addWidget(self.start_button)
-        self.start_button.setText("Start Training")
-        self.ui.setLayout(self.layout)
-
-    def init_logger(self, filename):
-        self.current_filename = filename
-        if os.path.isfile(filename):
-            self.gesture_data = pd.read_csv(filename)
-        else:
-            self.gesture_data = pd.DataFrame(
-                columns=['gestureName', 'frequenciesX', 'frequenciesY', 'frequenciesZ'])
-
-    def start_or_stop_recording(self):
-        if self.isRecording:
-            # If we were recording, we now want to stop the recording and write our pd dataframe to a csv file
-            self.gesture_data = self.gesture_data.append({'gestureName':self.name_input.text(),
-                                                                        'frequenciesX': "|".join(map(str,self.current_gesture_x_frequencies)),
-                                                                        'frequenciesY': "|".join(map(str,self.current_gesture_y_frequencies)),
-                                                                        'frequenciesZ': "|".join(map(str,self.current_gesture_z_frequencies))}
-                                             , ignore_index=True)
-            self.gesture_data.to_csv(self.current_filename, index=False)
-            self.isRecording = False
-            self.start_button.setText("Start Training")
-        else:
-            # If we weren't recording before we want start a pd dataframe
-            self.init_logger(TRAINING_DATA_FILE)
-            self.isRecording = True
-            self.start_button.setText("Stop Training")
-
-    def ctrlWidget(self):
-        return self.ui
+    def get_current_frequencies_as_string(self, seperator):
+        current_frequency_strings = []
+        current_frequency_strings.append(seperator.join(map(str, self.current_gesture_x_frequencies)))
+        current_frequency_strings.append(seperator.join(map(str, self.current_gesture_y_frequencies)))
+        current_frequency_strings.append(seperator.join(map(str, self.current_gesture_z_frequencies)))
+        return current_frequency_strings
 
     def process(self, **kwds):
         # Get the last values from our accelerator data
@@ -215,7 +338,6 @@ class TrainNode(Node):
         self.current_gesture_y_frequencies = kwds["accelerator_y"]
         self.current_gesture_z_frequencies = kwds["accelerator_z"]
 
-        # Write them to our pd dataframe if we are currently recording
 
 
 
@@ -234,6 +356,7 @@ class FftNode(Node):
             "frequencyY": dict(io="out"),
             "frequencyZ": dict(io="out"),
         })
+        self.had_input_yet = False
         self.current_data_x = []
         self.current_data_y = []
         self.current_data_z = []
@@ -254,8 +377,11 @@ class FftNode(Node):
         except Exception as e:
             print(e)
 
-    def process(self, **kwds):
+    def get_had_input_yet(self):
+        return self.had_input_yet
 
+    def process(self, **kwds):
+        self.had_input_yet = True
         self.current_data_x.append(kwds["accelX"][-1])
         self.current_data_y.append(kwds["accelY"][-1])
         self.current_data_z.append(kwds["accelZ"][-1])
@@ -266,84 +392,19 @@ class FftNode(Node):
         return {'frequencyX': np.array(x_frequency), 'frequencyY': np.array(y_frequency), 'frequencyZ': np.array(z_frequency)}
 
 
-def init_nodes():
-    # create buffer nodes
-    buffer_node_x = fc.createNode("Buffer", pos=(150, 0))
-    buffer_node_y = fc.createNode("Buffer", pos=(150, 100))
-    buffer_node_z = fc.createNode("Buffer", pos=(150, 200))
 
-    # connect buffer nodes
-    fc.connectTerminals(dippid_node["accelX"], buffer_node_x["dataIn"])
-    fc.connectTerminals(dippid_node["accelY"], buffer_node_y["dataIn"])
-    fc.connectTerminals(dippid_node["accelZ"], buffer_node_z["dataIn"])
-
-    # connect FFT node
-    fc.connectTerminals(buffer_node_x["dataOut"], fft_node["accelX"])
-    fc.connectTerminals(buffer_node_y["dataOut"], fft_node["accelY"])
-    fc.connectTerminals(buffer_node_z["dataOut"], fft_node["accelZ"])
-
-    # connect svm node
-    fc.connectTerminals(fft_node["frequencyY"], svm_node["sample_input"])
-
-
-    # connect train node to accelerator values
-    fc.connectTerminals(train_node["accelerator_x"], fft_node["frequencyX"])
-    fc.connectTerminals(train_node["accelerator_y"], fft_node["frequencyY"])
-    fc.connectTerminals(train_node["accelerator_z"], fft_node["frequencyZ"])
-    fc.connectTerminals(prediction_node["accelerator_x"], fft_node["frequencyX"])
-    fc.connectTerminals(prediction_node["accelerator_y"], fft_node["frequencyY"])
-    fc.connectTerminals(prediction_node["accelerator_z"], fft_node["frequencyZ"])
 
 
 if __name__ == "__main__":
     fclib.registerNodeType(FftNode, [("FftNode",)])
-    fclib.registerNodeType(SvmNode, [("SvmNode",)])
     fclib.registerNodeType(TrainNode, [("TrainNode",) ])
     fclib.registerNodeType(PredictionNode, [("PredictionNode",)])
-
-    app = QtGui.QApplication([])
-    win = QtGui.QMainWindow()
-    win.setWindowTitle("DIPPID Activity Recognizer")
-
-    # Define a top-level widget to hold everything
-    central_widget = QtGui.QWidget()
-    central_widget.setFixedWidth(500)
-    win.setCentralWidget(central_widget)
+    print("hallo")
+    app = QtWidgets.QApplication([])
+    win = ActivityRecognizer()
 
 
-    # Create a grid layout to manage the widgets size and position
-    layout = QtGui.QGridLayout()
-    ''' button_layout = QtGui.QHBoxLayout(win)
-    train_button = QtGui.QPushButton("Train Gesture", win)
-    recognize_button = QtGui.QPushButton("Recognize Gesture", win)
-    button_layout.addWidget(train_button)
-    button_layout.addWidget(recognize_button)'''
 
-    central_widget.setLayout(layout)
-    # Creating flowchart
-    fc = Flowchart(terminals={})
-    layout.addWidget(fc.widget(), 0, 0, 2, 3)
-
-
-    # create DIPPID node
-    dippid_node = fc.createNode("DIPPID", pos=(0, 0))
-
-    # create Train node
-
-    train_node = fc.createNode("TrainNode", pos=(450, 150))
-
-    # create Prediction node
-
-    prediction_node = fc.createNode("PredictionNode", pos=(450, 150))
-
-    # create FFT node
-    fft_node = fc.createNode("FftNode", pos=(300, 100))
-
-    # create SVM node
-    svm_node = fc.createNode("SvmNode", pos=(450, 100))
-
-
-    init_nodes()
 
 
     win.show()
