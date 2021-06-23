@@ -107,7 +107,7 @@ class ActivityRecognizer(QMainWindow):
         self.prediction_control_widget.setLayout(QtWidgets.QVBoxLayout())
         self.predict_button = QtWidgets.QPushButton("Start Predicting")
         self.predict_button.clicked.connect(self.predict_button_press)
-        self.predict_label = QtWidgets.QLabel("No Gesture Recognizes yet")
+        self.predict_label = QtWidgets.QLabel("No Gesture recognized yet")
         self.prediction_control_widget.layout().addWidget(self.predict_button)
         self.prediction_control_widget.layout().addWidget(self.predict_label)
         self.main_control_widget.layout().addWidget(
@@ -204,9 +204,10 @@ class ActivityRecognizer(QMainWindow):
 
     def delete_selected_gesture_from_list(self):
         index = self.gesture_list_list_widget.currentIndex().row()
+
         self.gesture_data = self.gesture_data.drop(
             self.gesture_data.index[index])
-        print(self.gesture_data)
+        
         self.update_gesture_list()
 
     def save_changes_to_csv(self):
@@ -278,8 +279,6 @@ class PredictionNode(Node):
         self.training_data_dict = {}
 
     def init_svm_with_data(self, data):
-        print("initsvm with data")
-        print(data)
         self.training_data_dict = data
         self.classifier = svm.SVC()
         categories = []
